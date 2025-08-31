@@ -1820,3 +1820,14 @@ date: 16-08-2025
 Next, you can build graphs based on this map. Nodes are voxels with weights, knowing the cost you can use it for route planning, avoiding expensive sections, for example so the robot doesn't get too close to walls or crash into them. Then dijkstra or a* and the robot can search for a path from its position to the goal using pure pursuit.
 
 Right now it's super rough and not accurate, needs calibration and bugfixing. But the fact that the e2e pipeline already works at all is awesome, even though it took so much pain and time and I've probably only moved like 5% towards the goal of implementing local navigation.
+
+---
+
+```yaml
+id: 163
+date: 30-08-2025
+media:
+  - 163-1.mp4
+```
+
+Got to the differential. Implemented and calibrated it. Now the turning radius is minimal and the wheels don’t slip when turning.
