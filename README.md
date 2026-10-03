@@ -2089,3 +2089,19 @@ A separate note on how we split resources. Orin Nano has 6 cores and 8 GB of mem
 -   ClickHouse did an insert every second into every table and ate 75% of a core. Once every 10 seconds and the load halved
 
 The camera dropped from 170-250% to 30-100%, memory from 6+ GB to 4. The real bottleneck turned out to be memory, the GPU is only 20-25% busy. While recording an SVO memory ran low, nvblox couldn't allocate a chunk on the GPU and took the camera process down. On a Jetson video memory is the same RAM.
+
+---
+
+```yaml
+id: 186
+date: 03-10-2026
+```
+
+After a few days with Claude trying to make navigation and positioning precise and accurate, I now understand why my robot vacuum is so dumb.
+
+-   I carried the robot to another room and for 10 minutes it couldn't figure out where it was. A vacuum in that situation honestly asks you to build the map again
+-   the camera sometimes confidently reports that the robot flew off 133 metres. Had to write a filter that doesn't believe jumps over half a metre
+-   there's a 30 cm blind zone in front and nothing at all behind. The robot pushed its rear into a wall for 70 seconds thinking it was driving. Now it's clear why the vacuum has a bumper it keeps kicking things with: it's the cheapest and most reliable sensor
+-   while exploring the flat the robot leaves a room without finishing the corners and then comes back. Exactly like the vacuum
+
+And that's one flat, good light and a robot that knows everything about itself: geometry, turning radius, where the camera is. A $200 vacuum has a lidar, a bumper and cliff sensors and it still gets stuck under the sofa. I respect it now.
