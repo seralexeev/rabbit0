@@ -1831,3 +1831,424 @@ media:
 ```
 
 Got to the differential. Implemented and calibrated it. Now the turning radius is minimal and the wheels don’t slip when turning.
+
+---
+
+```yaml
+id: 164
+date: 01-10-2026
+```
+
+I haven't written anything for over a year. The robot mostly just sat there: when I turned it on, docker said all the containers had exited 5 months ago. I decided to come back to it with a new approach: almost all the code is now written by Claude Code agents, and I set the tasks, watch what comes out, put the robot on the floor and carry it from place to place. Let's see how it goes.
+
+---
+
+```yaml
+id: 165
+date: 01-10-2026
+```
+
+First we sorted out the telemetry. Before, roboclaw published speed 10 times a second and the current sensor once a second, which is useless because a battery sag on launch lasts a few hundred milliseconds. Now motors and power are 50 Hz, steering 20 Hz, IMU from the camera ~110 Hz (400 Hz inside, I average it), and every message has a timestamp in nanoseconds.
+
+Along the way we found a bunch of old bugs:
+
+-   RoboClaw `read_status` expected 1 byte but firmware 4.x returns 4 bytes + CRC, so the status always failed with CRC mismatch
+-   `set_interval` in `init()` never returned
+-   a bare `except:` swallowed `CancelledError`, nodes couldn't shut down properly and the map was never saved on stop
+-   the camera wrote the current white balance into KV as the default and the picture stayed yellow forever
+
+---
+
+```yaml
+id: 166
+date: 01-10-2026
+```
+
+The funniest part: the ZED couldn't hold 30 fps because the CPU was sitting at 730 MHz out of 1728 and the GPU at 306 out of 1020. Nobody had run `jetson_clocks`. One command and frame capture went from 34 ms to 14 ms.
+
+---
+
+```yaml
+id: 167
+date: 01-10-2026
+```
+
+RoboClaw over USB vs UART: 377 reads per second with no errors vs 119 with occasional CRC errors. Also after a Jetson reboot NTP moves the clock, but the camera has its own clock, so all poses ended up 5.7 minutes in the past. Now camera time goes through an offset to the system clock.
+
+---
+
+```yaml
+id: 168
+date: 01-10-2026
+```
+
+In parallel I started Forge. The idea is simple: write absolutely everything the robot publishes into ClickHouse on one clock and add an agent that answers questions about this data. For common questions there are pre-checked queries (I called them slabs), for everything else the agent writes SQL itself, but it goes through a static check and EXPLAIN before it runs. Plus anomaly detection with Chronos-2, a foundation model for time series: it predicts what a signal should look like and an anomaly is when the signal leaves the forecast band. Basically the kind of analytics I build at work, just a tiny version.
+
+---
+
+```yaml
+id: 169
+date: 01-10-2026
+```
+
+Updated the ZED SDK to 5.5 and decided to build the room map with the built-in spatial mapping. I threw out the old nvblox I built last August (#160) completely, together with the self-built torch. Spoiler: that was a mistake.
+
+The first problem showed up right away: the camera process ate 5.4 GB out of 7.4. We measured feature by feature and spatial mapping alone took about 2 GB. Had to cap its memory and set the resolution to 5 cm.
+
+---
+
+```yaml
+id: 170
+date: 01-10-2026
+```
+
+The UI is completely rewritten: now it's one 3D scene with the robot in Crysis style, telemetry panels, a third-person camera and an AI chat right in the interface. In the chat you can ask about the data and get a chart, or ask the robot to drive, but any motion needs an APPROVE click. The bunny model with ears was also drawn by the agent.
+
+---
+
+```yaml
+id: 171
+date: 01-10-2026
+```
+
+First autonomous drives. The mission queue lives on the robot: "turn around and drive one meter forward" works, it turns 180° within a degree. You click in the 3D scene and the robot drives there, and if the point is behind, it turns around back and forth in a few moves. I also calibrated the steering zero: without trim the robot drifted 3.75° over half a meter, with +32 µs trim it's almost straight.
+
+---
+
+```yaml
+id: 172
+date: 01-10-2026
+```
+
+At some point the Jetson rebooted by itself right in the middle of maneuvers. After that the RoboClaw moved from `/dev/ttyACM0` to `/dev/ttyACM1` and the node crashed, and the camera got stuck looking for itself in the saved map. The best part came next: the motors pulled 6 A each and the robot "didn't move", I already thought something was jammed. But it was moving, the camera pose was just frozen. Ping to the robot was 1.5 seconds at the time because of Wi-Fi power save.
+
+---
+
+```yaml
+id: 173
+date: 01-10-2026
+```
+
+The robot crashed into a wall. Twice. The safety guard was supposed to stop it at 15 cm, but the camera can't see depth closer than ~30 cm (I wrote about the blind zone back in #154). The wall just disappeared from the scan right before contact and the robot decided the path was clear. Now it stops at 30 cm and obstacles are remembered in world coordinates for a few seconds.
+
+---
+
+```yaml
+id: 174
+date: 01-10-2026
+```
+
+Asked for a command so the robot builds a map of the flat by itself. All the ready-made packages for this are tied to ROS, so our own again: frontier exploration and Hybrid A\* for Ackermann with forward and reverse.
+
+At first the robot didn't go anywhere at all. I had tuned the depth thresholds for a pretty map, and in front of a white wall in dim light the camera started throwing away 80-90% of points. The robot thought it was blind. I reverted the thresholds and it drove 6 meters in 46 seconds. The map got noisier, but a clean map and dense obstacles are fed by the same depth and you have to pick.
+
+---
+
+```yaml
+id: 175
+date: 01-10-2026
+```
+
+Redid the differential from #163 with proper Ackermann geometry, and the minimum turning radius grew from 0.31 to 0.37-0.47 m. Had to bring back a 1.6 gain, now the rear wheels help steer a bit. And it turns out it turns wider to the right than to the left: 0.40 vs 0.30 m. Now there are separate tables for left and right turns everywhere.
+
+---
+
+```yaml
+id: 176
+date: 01-10-2026
+```
+
+Complained about lag, the video was sometimes 6 seconds behind. Found three causes:
+
+-   the ZED mesh filter held the GIL for up to 2 seconds and froze the whole camera process, and after filtering the whole map was sent again every time
+-   the telemetry node blocked its event loop with a jtop call, RTT to NATS was 2.4 seconds
+-   the router kicked the robot 45 times an hour, the Realtek driver turned power save back on after every reconnect
+
+Inside the robot latency is now tens of milliseconds, the rest is Wi-Fi.
+
+---
+
+```yaml
+id: 177
+date: 02-10-2026
+```
+
+Went to sleep and left agents working overnight: code review, UI performance, Forge in docker compose. In the morning there were 12 commits. The reviewer btw found that after any rejected mission all the safety trips (collision, stall) were silently turned off. Good that the reviewer found it and not a wall.
+
+---
+
+```yaml
+id: 178
+date: 02-10-2026
+```
+
+Bad news in the morning: the big map of the flat is gone for good. If the camera couldn't find itself in 15 seconds, the map was renamed to the only backup, and a second failure in a row overwrote that too. It happened twice overnight and once more in the morning from the platform. Now there's an archive of the last 5 maps.
+
+---
+
+```yaml
+id: 179
+date: 02-10-2026
+```
+
+Then the map disappeared from the UI again. Tracking ran away to -138 meters, and I was sending mesh vertices as int16 in millimeters, so ±32 meters max, and everything overflowed. Now every chunk has its own origin. Never figured out why tracking ran away.
+
+---
+
+```yaml
+id: 180
+date: 02-10-2026
+```
+
+The CONTACT indicator kept jumping to the floor. We counted in the data: 84-91% of "nearest obstacles" were the floor. Height was measured from a global floor estimate, and 1° of pose tilt is already 5 cm at three meters. Now the floor plane is fitted in every frame.
+
+---
+
+```yaml
+id: 181
+date: 02-10-2026
+```
+
+Merged Forge into the robot monorepo and moved it together with the UI onto the Jetson itself: ClickHouse with a 900 MB limit, recording no longer depends on whether my mac is on. ClickHouse was eating 75% of a core, turned out it was an insert every second into every table. Made it every 10 seconds and the load dropped by half.
+
+---
+
+```yaml
+id: 182
+date: 02-10-2026
+```
+
+The robot is now reachable from the internet through a Cloudflare tunnel: [live.rabbit0.dev](https://live.rabbit0.dev). Then I realized anyone with this link can drive the robot around and reset the map, so I made personal links. I give a link to a friend, they play around, then I delete it and 5 seconds later everything drops for them.
+
+---
+
+```yaml
+id: 183
+date: 02-10-2026
+```
+
+All the interrupts on the Jetson were on CPU0 and it was loaded at 100%. Spread the camera, UART and I2C across different cores. Removed the GNOME desktop which I don't need, that's +300 MB of memory. As it turned out later, exactly this switch reset the clocks for an hour and a half (#197).
+
+---
+
+```yaml
+id: 184
+date: 02-10-2026
+```
+
+Started optimizing the camera aggressively. The ZED process was eating 185% CPU and it turned out Python had nothing to do with it: 90% of the time is inside the SDK, in the GEN_3 tracking optimizer. So rewriting everything in C++ doesn't make much sense.
+
+Along the way the agent attached gdb to the live camera process and froze it for 2 minutes. Now that's a rule: no gdb on the camera, only py-spy.
+
+---
+
+```yaml
+id: 185
+date: 02-10-2026
+```
+
+nvblox is back, but done right this time. We recorded an SVO and ran the same drive through different configs: the ZED map is +2.1 GB of memory, while nvblox builds a fuller map in 184 MB and ~2 ms per frame on the GPU. The agent built nvblox on the Jetson (16 minutes) and wrote a small C++/CUDA extension with nanobind that takes depth from the camera and outputs mesh blocks in the same format as before. The camera process went from 3.4 GB down to 1.4 GB. Threw it out yesterday, brought it back today.
+
+---
+
+```yaml
+id: 186
+date: 02-10-2026
+media:
+  - 186-1.jpg
+```
+
+Added object detection. We went through a bunch of options from cloud models to plain YOLO on COCO, but the camera sits 13 cm above the floor and models have barely seen this angle: the TV stand was called a bench and the TV a blackboard. In the end it's YOLOE with an open vocabulary, 58 classes baked into the ONNX, and the ZED SDK builds TensorRT itself, computes 3D boxes and tracks objects. Had to add a separate "low wooden cabinet" class, otherwise it couldn't find the TV stand. The first TensorRT engine build took 9 minutes.
+
+---
+
+```yaml
+id: 187
+date: 02-10-2026
+```
+
+Added voice. OpenAI Realtime right in the UI, all the same tools as the chat, charts show up in the same feed. At first it only answered in English because the shared prompt said "always write in English".
+
+You can confirm a mission by voice, but the decision is made by code from the transcript of what I said, not by the model: only short phrases, and any negation wins, so "yes no, cancel" is a no.
+
+---
+
+```yaml
+id: 188
+date: 02-10-2026
+```
+
+During the day three agents worked in one repo and on one robot at the same time: one moved the map to nvblox, the second did the detector, the third did voice. They coordinated with messages like "taking the camera", "releasing the camera" and "don't deploy, my image is still building". One of them still ran a local `vite build`, someone else's deploy shipped it to the robot and the public UI broke with CORS. Just like a real team.
+
+---
+
+```yaml
+id: 189
+date: 02-10-2026
+```
+
+Put the robot on a table and watched it fall through the floor in the UI. The floor estimate assumed the wheels are always on the floor and moved up 69 cm together with the camera. Plus the glossy parquet and glass gave reflections, there was a whole mirror room under the floor. Now a new floor level is accepted only after driving a meter on it, and depth rays are clipped at the floor plane right in CUDA.
+
+---
+
+```yaml
+id: 190
+date: 02-10-2026
+```
+
+The map is now made of 5 cm voxels, just like the minecraft world I wrote about in #161. At first the robot was driving over bricks sticking out of the floor: the floor sat exactly on a voxel boundary and ±1 cm of noise pushed it into the row above. Shifted the grid by half a voxel and bricks went from 14% to 2%.
+
+---
+
+```yaml
+id: 191
+date: 02-10-2026
+```
+
+Found a bug in ZED SDK 5.5: GEN_3 tracking keeps adding keyframes even when the robot just stands still. 265 of them in 9 minutes, CPU from 31% to 135%, the map file swelled to 70-80 MB. Workaround: by default the camera only localizes in the existing map and extends it only for a new map or during exploration. At rest the camera process is now 17-45% CPU instead of 134-185%.
+
+---
+
+```yaml
+id: 192
+date: 02-10-2026
+media:
+  - 192-1.jpg
+```
+
+"Drive up to the fridge" didn't work before because the chat agent had no planner and sent the robot blind. Now a separate node builds a Hybrid A\* route on a traversability grid that nvblox computes on the GPU in 1-5 ms (before, on the CPU, up to 3 seconds). A route is planned in 5-30 ms and replanned if something shows up on the way.
+
+The fridge was fun: first the robot stopped in front of a wall corner, then 2.26 m from the fridge, and in the successful trip it changed its mind 6 times between the short route and a detour through the whole flat. In the end 5.35 m in 52 seconds and a stop 30-40 cm from the door.
+
+---
+
+```yaml
+id: 193
+date: 02-10-2026
+```
+
+Wi-Fi. The router hears the robot at -78 dBm, worse than any other device in the house. The Realtek driver ignores the country code and transmits at ~10 dBm. I disabled the limit table and power went up to 25 dBm. I know that's more than allowed in Australia.
+
+---
+
+```yaml
+id: 194
+date: 02-10-2026
+media:
+  - 194-1.jpg
+```
+
+Turned the robot off for the night, but before that dumped all the day's data into Parquet, and the agent dug through it overnight without the robot. It found a great one: for a few seconds after relocalization the ZED SDK returns coordinates in millimeters, even though the settings say meters. 21 576 such poses in a day. That's where the 4 kilometer "jumps" in the logs came from, and a broken map with obstacles exactly where the robot had just driven. Also the KNOWN_MAP status flips back to INITIALIZING 5-8 seconds later, so "found itself" now only counts after 10 seconds of stable status.
+
+The filter turned out simple: if the pose jumps further than the robot could have driven, it goes into quarantine for 4 seconds. If it comes back, it was a glitch. If it stays at the new place, it's a real correction.
+
+```python
+def update(self, now, position):
+    if self.accepted is None or self.reachable(self.accepted, now, position):
+        self.accepted = (now, position)
+        self.pending = None
+        return True
+    if self.pending is not None and self.reachable(self.pending[1:], now, position):
+        if now - self.pending[0] >= self.settle_s:
+            self.accepted = (now, position)
+            return True
+        return False
+    self.pending = (now, now, position)
+    return False
+```
+
+---
+
+```yaml
+id: 195
+date: 03-10-2026
+```
+
+In the morning the robot couldn't find itself in the map. Turns out on shutdown the map file was saved in the LOST state and overwrote the good one. Even the backup didn't help, had to reset the map. Now the map is saved only when the camera knows for sure where it is.
+
+---
+
+```yaml
+id: 196
+date: 03-10-2026
+```
+
+Removed the operator heartbeat. It was meant as protection: if the UI disappears, the robot stops. In practice autonomous trips failed with "operator link lost" every time the tab wasn't open. Now the UI is just a viewer, and safety is handled by the robot itself: collision protection, stall detection and command timeouts.
+
+---
+
+```yaml
+id: 197
+date: 03-10-2026
+```
+
+Yesterday there was an hour and a half of lowered clocks and I thought it was over-current throttling. Turns out I did it to myself: `systemctl isolate multi-user.target` while turning off GNOME restarted `nvpmodel`, and it brought back the default minimum clocks. Added a drop-in so `jetson_clocks` always runs after nvpmodel.
+
+Real over-current (OC3) is there too, 1-2 times a second the clock drops by half for about a millisecond. In total around 0.5% of performance, NVIDIA says it's expected.
+
+---
+
+```yaml
+id: 198
+date: 03-10-2026
+```
+
+Asked whether it's worth updating JetPack. It's not: the GPU is loaded at 20-25%, we're limited by memory and CPU. And in newer L4T the UART the RoboClaw hangs on is broken. Updating Python to 3.12 is more useful, especially since 3.10 support ends at the end of October.
+
+---
+
+```yaml
+id: 199
+date: 03-10-2026
+```
+
+Asked a question: aren't we reinventing the wheel? The agent did a survey and answered: in navigation no, in localization yes. Nav2 from ROS for example can't do different turning radii left and right, so we keep our own Hybrid A\*. But all the wrapping around GEN_3 (timeouts, the millimeter filter, map archives, resets) is patching a black box where one pose is both odometry and global positioning at the same time.
+
+---
+
+```yaml
+id: 200
+date: 03-10-2026
+```
+
+First step: split the pose into odom and map. Navigation now drives on continuous odometry and map jumps don't jerk it. On a 2.8 m drive with a turn the difference is 3 mm.
+
+---
+
+```yaml
+id: 201
+date: 03-10-2026
+media:
+  - 201-1.jpg
+```
+
+Said "let's rewrite everything", the robot isn't in production. First a benchmark on recorded drives. First results: RTAB-Map found itself in 20 out of 20 starts without a single false fix, while GEN_3 didn't find itself at all in one of the directions. cuVSLAM computes odometry in 2.5 ms per frame. But there's no ground truth yet, so I need to stick marks of masking tape on the floor.
+
+---
+
+```yaml
+id: 202
+date: 03-10-2026
+```
+
+Recorded a map of the flat manually with the gamepad. The robot drove really jerky: in the far room Wi-Fi is -75 dBm and commands arrive in bursts. A minute in the camera process crashed with CUDA out of memory in nvblox. Second attempt 8 minutes and 2.6 GB, in the middle the router kicked the robot and it "froze", but actually it just lost the network. The Cloudflare tunnel on QUIC never came back by itself after that, so I switched it to HTTP/2. And added smooth acceleration for the motors so bursts of commands don't jerk the robot.
+
+Accelerating to half power now takes 0.3 seconds, and braking is three times faster so safety doesn't suffer:
+
+```python
+def slew(current, target, dt, accel, decel):
+    braking = abs(target) < abs(current) or target * current < 0
+    step = (decel if braking else accel) * dt
+    return current + max(-step, min(step, target - current))
+```
+
+The benchmark later showed the recording came out bad anyway: 4.5 frames per second instead of 15-30. Orin Nano has no hardware video encoder, LOSSLESS compresses on the CPU and can't keep up while tracking, nvblox and the detector run in parallel. Will re-record in a lightweight mode.
+
+---
+
+```yaml
+id: 203
+date: 03-10-2026
+```
+
+A few takeaways about working with agents over these three days. A lot got done, but things broke at the same speed: lost maps, reset clocks, a camera frozen by gdb, a local build that went to prod. All these lessons are now written down in `docs/` in the robot repo, so the next agent doesn't step on the same rakes. And the robot still needs proper Wi-Fi.
