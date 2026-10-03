@@ -247,111 +247,66 @@
                     </header>
 
                     <div class="post-list">
-        <article class="post" id="203">
+        <article class="post" id="185">
             <div class="post-header">
-                <a href="#203">#203</a>
+                <a href="#185">#185</a>
                 <div class="post-meta">03-10-2026</div>
             </div>
-            <div class="post-body"><p>A few takeaways about working with agents over these three days. A lot got done, but things broke at the same speed: lost maps, reset clocks, a camera frozen by gdb, a local build that went to prod. All these lessons are now written down in <code>docs/</code> in the robot repo, so the next agent doesn&#39;t step on the same rakes. And the robot still needs proper Wi-Fi.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="202">
-            <div class="post-header">
-                <a href="#202">#202</a>
-                <div class="post-meta">03-10-2026</div>
-            </div>
-            <div class="post-body"><p>Recorded a map of the flat manually with the gamepad. The robot drove really jerky: in the far room Wi-Fi is -75 dBm and commands arrive in bursts. A minute in the camera process crashed with CUDA out of memory in nvblox. Second attempt 8 minutes and 2.6 GB, in the middle the router kicked the robot and it &quot;froze&quot;, but actually it just lost the network. The Cloudflare tunnel on QUIC never came back by itself after that, so I switched it to HTTP/2. And added smooth acceleration for the motors so bursts of commands don&#39;t jerk the robot.</p>
-<p>Accelerating to half power now takes 0.3 seconds, and braking is three times faster so safety doesn&#39;t suffer:</p>
-<pre><code class="language-python">def slew(current, target, dt, accel, decel):
-    braking = abs(target) &lt; abs(current) or target * current &lt; 0
-    step = (decel if braking else accel) * dt
-    return current + max(-step, min(step, target - current))
-</code></pre>
-<p>The benchmark later showed the recording came out bad anyway: 4.5 frames per second instead of 15-30. Orin Nano has no hardware video encoder, LOSSLESS compresses on the CPU and can&#39;t keep up while tracking, nvblox and the detector run in parallel. Will re-record in a lightweight mode.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="201">
-            <div class="post-header">
-                <a href="#201">#201</a>
-                <div class="post-meta">03-10-2026</div>
-            </div>
-            <div class="post-body"><p>Said &quot;let&#39;s rewrite everything&quot;, the robot isn&#39;t in production. First a benchmark on recorded drives. First results: RTAB-Map found itself in 20 out of 20 starts without a single false fix, while GEN_3 didn&#39;t find itself at all in one of the directions. cuVSLAM computes odometry in 2.5 ms per frame. But there&#39;s no ground truth yet, so I need to stick marks of masking tape on the floor.</p>
+            <div class="post-body"><p>A separate note on how we split resources. Orin Nano has 6 cores and 8 GB of memory for everything, GPU included, and at the start the camera alone was eating almost two cores.</p>
+<ul>
+<li>all interrupts sat on CPU0 and it was 100% busy. Spread them out: the camera&#39;s USB on CPU2, the RoboClaw UART on CPU4, I2C on CPU5. The Wi-Fi interrupt can&#39;t be moved, on this platform it&#39;s nailed to core zero</li>
+<li>py-spy showed that 90% of the camera process CPU isn&#39;t my Python but the tracking optimizer inside the SDK. No point rewriting it in C++, it just needs to be called less</li>
+<li>the camera has three modes: 30 fps when something is moving, 5 fps when the UI is open, 1 fps when nobody is watching. Depth on every second frame: GPU from 34% to 19%, power from 13.6 to 12.4 W. The 15 fps cap I actually removed: same CPU, but the pose arrives 55 ms later</li>
+<li>the map is built by nvblox on the GPU: 184 MB and ~2 ms per frame, the built-in ZED map was +2.1 GB</li>
+<li>ClickHouse did an insert every second into every table and ate 75% of a core. Once every 10 seconds and the load halved</li>
+</ul>
+<p>The camera dropped from 170-250% to 30-100%, memory from 6+ GB to 4. The real bottleneck turned out to be memory, the GPU is only 20-25% busy. While recording an SVO memory ran low, nvblox couldn&#39;t allocate a chunk on the GPU and took the camera process down. On a Jetson video memory is the same RAM.</p>
 </div>
             <div class="post-media">
-        <a class="media-item" href="media/201-1.jpg" target="_blank" rel="noopener noreferrer">
-            <img src="media/thumbnails/201-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        <a class="media-item" href="media/185-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/185-1.webp" alt="Preview" loading="lazy" decoding="async" />
         </a>
     </div>
         </article>
     <div class="divider">...</div>
-        <article class="post" id="200">
+        <article class="post" id="184">
             <div class="post-header">
-                <a href="#200">#200</a>
+                <a href="#184">#184</a>
                 <div class="post-meta">03-10-2026</div>
             </div>
-            <div class="post-body"><p>First step: split the pose into odom and map. Navigation now drives on continuous odometry and map jumps don&#39;t jerk it. On a 2.8 m drive with a turn the difference is 3 mm.</p>
+            <div class="post-body"><p>Said &quot;let&#39;s rewrite everything&quot;, the robot isn&#39;t in production. First a benchmark on recorded drives. RTAB-Map finds itself on another drive&#39;s map in 0.5-2.6 seconds. GEN_3 manages it in 6.7 in one direction and not at all in the other. Out of 40 &quot;switched on anywhere&quot; starts RTAB-Map locked on in 35, once off by 86 cm. cuVSLAM computes odometry in 2.5 ms per frame. But there&#39;s no ground truth yet, so I need to stick marks of masking tape on the floor.</p>
 </div>
-            
+            <div class="post-media">
+        <a class="media-item" href="media/184-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/184-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        </a>
+    </div>
         </article>
     <div class="divider">...</div>
-        <article class="post" id="199">
+        <article class="post" id="183">
             <div class="post-header">
-                <a href="#199">#199</a>
+                <a href="#183">#183</a>
                 <div class="post-meta">03-10-2026</div>
             </div>
             <div class="post-body"><p>Asked a question: aren&#39;t we reinventing the wheel? The agent did a survey and answered: in navigation no, in localization yes. Nav2 from ROS for example can&#39;t do different turning radii left and right, so we keep our own Hybrid A*. But all the wrapping around GEN_3 (timeouts, the millimeter filter, map archives, resets) is patching a black box where one pose is both odometry and global positioning at the same time.</p>
+<p>First step: split the pose into odom and map. Navigation now drives on continuous odometry and map jumps don&#39;t jerk it. On a 2.8 m drive with a turn the difference is 3 mm.</p>
 </div>
             
         </article>
     <div class="divider">...</div>
-        <article class="post" id="198">
+        <article class="post" id="182">
             <div class="post-header">
-                <a href="#198">#198</a>
+                <a href="#182">#182</a>
                 <div class="post-meta">03-10-2026</div>
             </div>
-            <div class="post-body"><p>Asked whether it&#39;s worth updating JetPack. It&#39;s not: the GPU is loaded at 20-25%, we&#39;re limited by memory and CPU. And in newer L4T the UART the RoboClaw hangs on is broken. Updating Python to 3.12 is more useful, especially since 3.10 support ends at the end of October.</p>
+            <div class="post-body"><p>Yesterday there was an hour and a half of lowered clocks and I thought it was over-current throttling. Turns out I did it to myself: while turning off GNOME <code>systemctl isolate multi-user.target</code> restarted <code>nvpmodel</code>, and it brought back the default minimum clocks, basically undoing the same <code>jetson_clocks</code> from #164. Now <code>jetson_clocks</code> always runs after nvpmodel. Real over-current is there too, but that&#39;s expected: 1-2 times a second the clock drops by half for about a millisecond, around 0.5% of performance in total.</p>
 </div>
             
         </article>
     <div class="divider">...</div>
-        <article class="post" id="197">
+        <article class="post" id="181">
             <div class="post-header">
-                <a href="#197">#197</a>
-                <div class="post-meta">03-10-2026</div>
-            </div>
-            <div class="post-body"><p>Yesterday there was an hour and a half of lowered clocks and I thought it was over-current throttling. Turns out I did it to myself: <code>systemctl isolate multi-user.target</code> while turning off GNOME restarted <code>nvpmodel</code>, and it brought back the default minimum clocks. Added a drop-in so <code>jetson_clocks</code> always runs after nvpmodel.</p>
-<p>Real over-current (OC3) is there too, 1-2 times a second the clock drops by half for about a millisecond. In total around 0.5% of performance, NVIDIA says it&#39;s expected.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="196">
-            <div class="post-header">
-                <a href="#196">#196</a>
-                <div class="post-meta">03-10-2026</div>
-            </div>
-            <div class="post-body"><p>Removed the operator heartbeat. It was meant as protection: if the UI disappears, the robot stops. In practice autonomous trips failed with &quot;operator link lost&quot; every time the tab wasn&#39;t open. Now the UI is just a viewer, and safety is handled by the robot itself: collision protection, stall detection and command timeouts.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="195">
-            <div class="post-header">
-                <a href="#195">#195</a>
-                <div class="post-meta">03-10-2026</div>
-            </div>
-            <div class="post-body"><p>In the morning the robot couldn&#39;t find itself in the map. Turns out on shutdown the map file was saved in the LOST state and overwrote the good one. Even the backup didn&#39;t help, had to reset the map. Now the map is saved only when the camera knows for sure where it is.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="194">
-            <div class="post-header">
-                <a href="#194">#194</a>
+                <a href="#181">#181</a>
                 <div class="post-meta">02-10-2026</div>
             </div>
             <div class="post-body"><p>Turned the robot off for the night, but before that dumped all the day&#39;s data into Parquet, and the agent dug through it overnight without the robot. It found a great one: for a few seconds after relocalization the ZED SDK returns coordinates in millimeters, even though the settings say meters. 21 576 such poses in a day. That&#39;s where the 4 kilometer &quot;jumps&quot; in the logs came from, and a broken map with obstacles exactly where the robot had just driven. Also the KNOWN_MAP status flips back to INITIALIZING 5-8 seconds later, so &quot;found itself&quot; now only counts after 10 seconds of stable status.</p>
@@ -371,151 +326,10 @@
 </code></pre>
 </div>
             <div class="post-media">
-        <a class="media-item" href="media/194-1.jpg" target="_blank" rel="noopener noreferrer">
-            <img src="media/thumbnails/194-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        <a class="media-item" href="media/181-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/181-1.webp" alt="Preview" loading="lazy" decoding="async" />
         </a>
     </div>
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="193">
-            <div class="post-header">
-                <a href="#193">#193</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>Wi-Fi. The router hears the robot at -78 dBm, worse than any other device in the house. The Realtek driver ignores the country code and transmits at ~10 dBm. I disabled the limit table and power went up to 25 dBm. I know that&#39;s more than allowed in Australia.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="192">
-            <div class="post-header">
-                <a href="#192">#192</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>&quot;Drive up to the fridge&quot; didn&#39;t work before because the chat agent had no planner and sent the robot blind. Now a separate node builds a Hybrid A* route on a traversability grid that nvblox computes on the GPU in 1-5 ms (before, on the CPU, up to 3 seconds). A route is planned in 5-30 ms and replanned if something shows up on the way.</p>
-<p>The fridge was fun: first the robot stopped in front of a wall corner, then 2.26 m from the fridge, and in the successful trip it changed its mind 6 times between the short route and a detour through the whole flat. In the end 5.35 m in 52 seconds and a stop 30-40 cm from the door.</p>
-</div>
-            <div class="post-media">
-        <a class="media-item" href="media/192-1.jpg" target="_blank" rel="noopener noreferrer">
-            <img src="media/thumbnails/192-1.webp" alt="Preview" loading="lazy" decoding="async" />
-        </a>
-    </div>
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="191">
-            <div class="post-header">
-                <a href="#191">#191</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>Found a bug in ZED SDK 5.5: GEN_3 tracking keeps adding keyframes even when the robot just stands still. 265 of them in 9 minutes, CPU from 31% to 135%, the map file swelled to 70-80 MB. Workaround: by default the camera only localizes in the existing map and extends it only for a new map or during exploration. At rest the camera process is now 17-45% CPU instead of 134-185%.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="190">
-            <div class="post-header">
-                <a href="#190">#190</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>The map is now made of 5 cm voxels, just like the minecraft world I wrote about in #161. At first the robot was driving over bricks sticking out of the floor: the floor sat exactly on a voxel boundary and ±1 cm of noise pushed it into the row above. Shifted the grid by half a voxel and bricks went from 14% to 2%.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="189">
-            <div class="post-header">
-                <a href="#189">#189</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>Put the robot on a table and watched it fall through the floor in the UI. The floor estimate assumed the wheels are always on the floor and moved up 69 cm together with the camera. Plus the glossy parquet and glass gave reflections, there was a whole mirror room under the floor. Now a new floor level is accepted only after driving a meter on it, and depth rays are clipped at the floor plane right in CUDA.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="188">
-            <div class="post-header">
-                <a href="#188">#188</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>During the day three agents worked in one repo and on one robot at the same time: one moved the map to nvblox, the second did the detector, the third did voice. They coordinated with messages like &quot;taking the camera&quot;, &quot;releasing the camera&quot; and &quot;don&#39;t deploy, my image is still building&quot;. One of them still ran a local <code>vite build</code>, someone else&#39;s deploy shipped it to the robot and the public UI broke with CORS. Just like a real team.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="187">
-            <div class="post-header">
-                <a href="#187">#187</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>Added voice. OpenAI Realtime right in the UI, all the same tools as the chat, charts show up in the same feed. At first it only answered in English because the shared prompt said &quot;always write in English&quot;.</p>
-<p>You can confirm a mission by voice, but the decision is made by code from the transcript of what I said, not by the model: only short phrases, and any negation wins, so &quot;yes no, cancel&quot; is a no.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="186">
-            <div class="post-header">
-                <a href="#186">#186</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>Added object detection. We went through a bunch of options from cloud models to plain YOLO on COCO, but the camera sits 13 cm above the floor and models have barely seen this angle: the TV stand was called a bench and the TV a blackboard. In the end it&#39;s YOLOE with an open vocabulary, 58 classes baked into the ONNX, and the ZED SDK builds TensorRT itself, computes 3D boxes and tracks objects. Had to add a separate &quot;low wooden cabinet&quot; class, otherwise it couldn&#39;t find the TV stand. The first TensorRT engine build took 9 minutes.</p>
-</div>
-            <div class="post-media">
-        <a class="media-item" href="media/186-1.jpg" target="_blank" rel="noopener noreferrer">
-            <img src="media/thumbnails/186-1.webp" alt="Preview" loading="lazy" decoding="async" />
-        </a>
-    </div>
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="185">
-            <div class="post-header">
-                <a href="#185">#185</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>nvblox is back, but done right this time. We recorded an SVO and ran the same drive through different configs: the ZED map is +2.1 GB of memory, while nvblox builds a fuller map in 184 MB and ~2 ms per frame on the GPU. The agent built nvblox on the Jetson (16 minutes) and wrote a small C++/CUDA extension with nanobind that takes depth from the camera and outputs mesh blocks in the same format as before. The camera process went from 3.4 GB down to 1.4 GB. Threw it out yesterday, brought it back today.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="184">
-            <div class="post-header">
-                <a href="#184">#184</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>Started optimizing the camera aggressively. The ZED process was eating 185% CPU and it turned out Python had nothing to do with it: 90% of the time is inside the SDK, in the GEN_3 tracking optimizer. So rewriting everything in C++ doesn&#39;t make much sense.</p>
-<p>Along the way the agent attached gdb to the live camera process and froze it for 2 minutes. Now that&#39;s a rule: no gdb on the camera, only py-spy.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="183">
-            <div class="post-header">
-                <a href="#183">#183</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>All the interrupts on the Jetson were on CPU0 and it was loaded at 100%. Spread the camera, UART and I2C across different cores. Removed the GNOME desktop which I don&#39;t need, that&#39;s +300 MB of memory. As it turned out later, exactly this switch reset the clocks for an hour and a half (#197).</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="182">
-            <div class="post-header">
-                <a href="#182">#182</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>The robot is now reachable from the internet through a Cloudflare tunnel: <a href="https://live.rabbit0.dev">live.rabbit0.dev</a>. Then I realized anyone with this link can drive the robot around and reset the map, so I made personal links. I give a link to a friend, they play around, then I delete it and 5 seconds later everything drops for them.</p>
-</div>
-            
-        </article>
-    <div class="divider">...</div>
-        <article class="post" id="181">
-            <div class="post-header">
-                <a href="#181">#181</a>
-                <div class="post-meta">02-10-2026</div>
-            </div>
-            <div class="post-body"><p>Merged Forge into the robot monorepo and moved it together with the UI onto the Jetson itself: ClickHouse with a 900 MB limit, recording no longer depends on whether my mac is on. ClickHouse was eating 75% of a core, turned out it was an insert every second into every table. Made it every 10 seconds and the load dropped by half.</p>
-</div>
-            
         </article>
     <div class="divider">...</div>
         <article class="post" id="180">
@@ -523,9 +337,14 @@
                 <a href="#180">#180</a>
                 <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>The CONTACT indicator kept jumping to the floor. We counted in the data: 84-91% of &quot;nearest obstacles&quot; were the floor. Height was measured from a global floor estimate, and 1° of pose tilt is already 5 cm at three meters. Now the floor plane is fitted in every frame.</p>
+            <div class="post-body"><p>&quot;Drive up to the fridge&quot; didn&#39;t work before because the chat agent had no planner and sent the robot blind. Now a separate node builds a Hybrid A* route on a traversability grid that nvblox computes on the GPU in 1-5 ms (before, on the CPU, up to 3 seconds). A route is planned in 5-30 ms and replanned if something shows up on the way.</p>
+<p>The fridge was fun: first the robot stopped in front of a wall corner, then 2.26 m from the fridge, and in the successful trip it changed its mind 6 times between the short route and a detour through the whole flat. In the end 5.35 m in 52 seconds and a stop 30-40 cm from the door.</p>
 </div>
-            
+            <div class="post-media">
+        <a class="media-item" href="media/180-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/180-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        </a>
+    </div>
         </article>
     <div class="divider">...</div>
         <article class="post" id="179">
@@ -533,7 +352,7 @@
                 <a href="#179">#179</a>
                 <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>Then the map disappeared from the UI again. Tracking ran away to -138 meters, and I was sending mesh vertices as int16 in millimeters, so ±32 meters max, and everything overflowed. Now every chunk has its own origin. Never figured out why tracking ran away.</p>
+            <div class="post-body"><p>Found a bug in ZED SDK 5.5: GEN_3 tracking keeps adding keyframes even when the robot just stands still. 265 of them in 9 minutes, CPU from 31% to 135%, the map file swelled to 70-80 MB. Workaround: by default the camera only localizes in the existing map and extends it only for a new map or during exploration. At rest the camera process is now 17-45% CPU instead of 134-185%.</p>
 </div>
             
         </article>
@@ -543,9 +362,14 @@
                 <a href="#178">#178</a>
                 <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>Bad news in the morning: the big map of the flat is gone for good. If the camera couldn&#39;t find itself in 15 seconds, the map was renamed to the only backup, and a second failure in a row overwrote that too. It happened twice overnight and once more in the morning from the platform. Now there&#39;s an archive of the last 5 maps.</p>
+            <div class="post-body"><p>Put the robot on a table and watched it fall through the floor in the UI. The floor estimate assumed the wheels are always on the floor and moved up 69 cm together with the camera. Plus the glossy parquet and glass gave reflections, there was a whole mirror room under the floor. Now a new floor level is accepted only after driving a meter on it, and depth rays are clipped at the floor plane right in CUDA.</p>
+<p>Also the map is now made of 5 cm voxels, just like the minecraft world I wrote about in #161. At first the robot was driving over bricks sticking out of the floor: the floor sat exactly on a voxel boundary and ±1 cm of noise pushed it into the row above. Shifted the grid by half a voxel and bricks went from 14% to 2%.</p>
 </div>
-            
+            <div class="post-media">
+        <a class="media-item" href="media/178-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/178-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        </a>
+    </div>
         </article>
     <div class="divider">...</div>
         <article class="post" id="177">
@@ -553,7 +377,7 @@
                 <a href="#177">#177</a>
                 <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>Went to sleep and left agents working overnight: code review, UI performance, Forge in docker compose. In the morning there were 12 commits. The reviewer btw found that after any rejected mission all the safety trips (collision, stall) were silently turned off. Good that the reviewer found it and not a wall.</p>
+            <div class="post-body"><p>During the day three agents worked in one repo and on one robot at the same time: one moved the map to nvblox, the second did the detector, the third did voice. They coordinated with messages like &quot;taking the camera&quot;, &quot;releasing the camera&quot; and &quot;don&#39;t deploy, my image is still building&quot;. One of them still ran a local <code>vite build</code>, someone else&#39;s deploy shipped it to the robot and the public UI broke with CORS. Just like a real team.</p>
 </div>
             
         </article>
@@ -561,36 +385,43 @@
         <article class="post" id="176">
             <div class="post-header">
                 <a href="#176">#176</a>
-                <div class="post-meta">01-10-2026</div>
+                <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>Complained about lag, the video was sometimes 6 seconds behind. Found three causes:</p>
-<ul>
-<li>the ZED mesh filter held the GIL for up to 2 seconds and froze the whole camera process, and after filtering the whole map was sent again every time</li>
-<li>the telemetry node blocked its event loop with a jtop call, RTT to NATS was 2.4 seconds</li>
-<li>the router kicked the robot 45 times an hour, the Realtek driver turned power save back on after every reconnect</li>
-</ul>
-<p>Inside the robot latency is now tens of milliseconds, the rest is Wi-Fi.</p>
+            <div class="post-body"><p>Added voice. OpenAI Realtime right in the UI, all the same tools as the chat, charts show up in the same feed. At first it only answered in English because the shared prompt said &quot;always write in English&quot;.</p>
+<p>You can confirm a mission by voice, but the decision is made by code from the transcript of what I said, not by the model: only short phrases, and any negation wins, so &quot;yes no, cancel&quot; is a no.</p>
 </div>
-            
+            <div class="post-media">
+        <a class="media-item" href="media/176-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/176-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        </a>
+    </div>
         </article>
     <div class="divider">...</div>
         <article class="post" id="175">
             <div class="post-header">
                 <a href="#175">#175</a>
-                <div class="post-meta">01-10-2026</div>
+                <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>Redid the differential from #163 with proper Ackermann geometry, and the minimum turning radius grew from 0.31 to 0.37-0.47 m. Had to bring back a 1.6 gain, now the rear wheels help steer a bit. And it turns out it turns wider to the right than to the left: 0.40 vs 0.30 m. Now there are separate tables for left and right turns everywhere.</p>
+            <div class="post-body"><p>Added object detection. We went through a bunch of options from cloud models to plain YOLO on COCO, but the camera sits 13 cm above the floor and models have barely seen this angle: the TV stand was called a bench and the TV a blackboard. In the end it&#39;s YOLOE with an open vocabulary, 58 classes baked into the ONNX, and the ZED SDK builds TensorRT itself, computes 3D boxes and tracks objects. Had to add a separate &quot;low wooden cabinet&quot; class, otherwise it couldn&#39;t find the TV stand. The first TensorRT engine build took 9 minutes.</p>
 </div>
-            
+            <div class="post-media">
+        <a class="media-item" href="media/175-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/175-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        </a>
+    
+        <a class="media-item" href="media/175-2.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/175-2.webp" alt="Preview" loading="lazy" decoding="async" />
+        </a>
+    </div>
         </article>
     <div class="divider">...</div>
         <article class="post" id="174">
             <div class="post-header">
                 <a href="#174">#174</a>
-                <div class="post-meta">01-10-2026</div>
+                <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>Asked for a command so the robot builds a map of the flat by itself. All the ready-made packages for this are tied to ROS, so our own again: frontier exploration and Hybrid A* for Ackermann with forward and reverse.</p>
-<p>At first the robot didn&#39;t go anywhere at all. I had tuned the depth thresholds for a pretty map, and in front of a white wall in dim light the camera started throwing away 80-90% of points. The robot thought it was blind. I reverted the thresholds and it drove 6 meters in 46 seconds. The map got noisier, but a clean map and dense obstacles are fed by the same depth and you have to pick.</p>
+            <div class="post-body"><p>Yesterday I threw out the old nvblox (#160) completely, together with the self-built torch, in favor of the built-in spatial mapping from the ZED SDK. Today it&#39;s back, but done right this time.</p>
+<p>The camera process was eating 185% CPU and 3.4 GB of memory. Profiling showed Python had nothing to do with it: almost all the time is inside the SDK, in the tracking optimizer. Along the way the agent attached gdb to the live camera process and froze it for 2 minutes, so gdb on the camera is now banned. Then we recorded an SVO and ran the same drive through different configs: the ZED map is +2.1 GB of memory, while nvblox builds a fuller map in 184 MB and ~2 ms per frame on the GPU. The agent built nvblox on the Jetson and wrote a small C++/CUDA extension with nanobind that takes depth from the camera and outputs mesh blocks in the same format as before. The camera process went from 3.4 GB down to 1.4 GB.</p>
 </div>
             
         </article>
@@ -598,9 +429,9 @@
         <article class="post" id="173">
             <div class="post-header">
                 <a href="#173">#173</a>
-                <div class="post-meta">01-10-2026</div>
+                <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>The robot crashed into a wall. Twice. The safety guard was supposed to stop it at 15 cm, but the camera can&#39;t see depth closer than ~30 cm (I wrote about the blind zone back in #154). The wall just disappeared from the scan right before contact and the robot decided the path was clear. Now it stops at 30 cm and obstacles are remembered in world coordinates for a few seconds.</p>
+            <div class="post-body"><p>The robot is now reachable from the internet through a Cloudflare tunnel: <a href="https://live.rabbit0.dev">live.rabbit0.dev</a>. Then I realized anyone with this link can drive the robot around and reset the map, so I made personal links. I give a link to a friend, they play around, then I delete it and 5 seconds later everything drops for them.</p>
 </div>
             
         </article>
@@ -608,9 +439,9 @@
         <article class="post" id="172">
             <div class="post-header">
                 <a href="#172">#172</a>
-                <div class="post-meta">01-10-2026</div>
+                <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>At some point the Jetson rebooted by itself right in the middle of maneuvers. After that the RoboClaw moved from <code>/dev/ttyACM0</code> to <code>/dev/ttyACM1</code> and the node crashed, and the camera got stuck looking for itself in the saved map. The best part came next: the motors pulled 6 A each and the robot &quot;didn&#39;t move&quot;, I already thought something was jammed. But it was moving, the camera pose was just frozen. Ping to the robot was 1.5 seconds at the time because of Wi-Fi power save.</p>
+            <div class="post-body"><p>In the morning the map disappeared from the UI. Tracking ran away to -138 meters, and I was sending mesh vertices as int16 in millimeters, so ±32 meters max, and everything overflowed. Now every chunk has its own origin. Never figured out why tracking ran away.</p>
 </div>
             
         </article>
@@ -618,9 +449,9 @@
         <article class="post" id="171">
             <div class="post-header">
                 <a href="#171">#171</a>
-                <div class="post-meta">01-10-2026</div>
+                <div class="post-meta">02-10-2026</div>
             </div>
-            <div class="post-body"><p>First autonomous drives. The mission queue lives on the robot: &quot;turn around and drive one meter forward&quot; works, it turns 180° within a degree. You click in the 3D scene and the robot drives there, and if the point is behind, it turns around back and forth in a few moves. I also calibrated the steering zero: without trim the robot drifted 3.75° over half a meter, with +32 µs trim it&#39;s almost straight.</p>
+            <div class="post-body"><p>Went to sleep and left agents working overnight: code review, UI performance, Forge in docker compose. In the morning there were 12 commits. The reviewer btw found that after any rejected mission all the safety trips (collision, stall) were silently turned off. Good that the reviewer found it and not a wall.</p>
 </div>
             
         </article>
@@ -630,9 +461,14 @@
                 <a href="#170">#170</a>
                 <div class="post-meta">01-10-2026</div>
             </div>
-            <div class="post-body"><p>The UI is completely rewritten: now it&#39;s one 3D scene with the robot in Crysis style, telemetry panels, a third-person camera and an AI chat right in the interface. In the chat you can ask about the data and get a chart, or ask the robot to drive, but any motion needs an APPROVE click. The bunny model with ears was also drawn by the agent.</p>
+            <div class="post-body"><p>Asked for a command so the robot builds a map of the flat by itself. All the ready-made packages for this are tied to ROS, so our own again: frontier exploration and Hybrid A* for Ackermann with forward and reverse.</p>
+<p>At first the robot didn&#39;t go anywhere at all. I had tuned the depth thresholds for a pretty map, and in front of a white wall in dim light the camera started throwing away 80-90% of points. The robot thought it was blind. I reverted the thresholds and it drove 6 meters in 46 seconds. A clean map and dense obstacles are fed by the same depth and you have to pick.</p>
 </div>
-            
+            <div class="post-media">
+        <a class="media-item" href="media/170-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/170-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        </a>
+    </div>
         </article>
     <div class="divider">...</div>
         <article class="post" id="169">
@@ -640,8 +476,7 @@
                 <a href="#169">#169</a>
                 <div class="post-meta">01-10-2026</div>
             </div>
-            <div class="post-body"><p>Updated the ZED SDK to 5.5 and decided to build the room map with the built-in spatial mapping. I threw out the old nvblox I built last August (#160) completely, together with the self-built torch. Spoiler: that was a mistake.</p>
-<p>The first problem showed up right away: the camera process ate 5.4 GB out of 7.4. We measured feature by feature and spatial mapping alone took about 2 GB. Had to cap its memory and set the resolution to 5 cm.</p>
+            <div class="post-body"><p>The robot crashed into a wall. Twice. The safety guard was supposed to stop it at 15 cm, but the camera can&#39;t see depth closer than ~30 cm (I wrote about the blind zone back in #154). The wall just disappeared from the scan right before contact and the robot decided the path was clear. Now it stops at 30 cm and obstacles are remembered in world coordinates for a few seconds.</p>
 </div>
             
         </article>
@@ -651,7 +486,7 @@
                 <a href="#168">#168</a>
                 <div class="post-meta">01-10-2026</div>
             </div>
-            <div class="post-body"><p>In parallel I started Forge. The idea is simple: write absolutely everything the robot publishes into ClickHouse on one clock and add an agent that answers questions about this data. For common questions there are pre-checked queries (I called them slabs), for everything else the agent writes SQL itself, but it goes through a static check and EXPLAIN before it runs. Plus anomaly detection with Chronos-2, a foundation model for time series: it predicts what a signal should look like and an anomaly is when the signal leaves the forecast band. Basically the kind of analytics I build at work, just a tiny version.</p>
+            <div class="post-body"><p>At some point the Jetson rebooted by itself right in the middle of maneuvers. After that the RoboClaw moved from <code>/dev/ttyACM0</code> to <code>/dev/ttyACM1</code> and the node crashed, and the camera got stuck looking for itself in the saved map. The best part came next: the motors pulled 6 A each and the robot &quot;didn&#39;t move&quot;, I already thought something was jammed. But it was moving, the camera pose was just frozen.</p>
 </div>
             
         </article>
@@ -661,9 +496,13 @@
                 <a href="#167">#167</a>
                 <div class="post-meta">01-10-2026</div>
             </div>
-            <div class="post-body"><p>RoboClaw over USB vs UART: 377 reads per second with no errors vs 119 with occasional CRC errors. Also after a Jetson reboot NTP moves the clock, but the camera has its own clock, so all poses ended up 5.7 minutes in the past. Now camera time goes through an offset to the system clock.</p>
+            <div class="post-body"><p>First autonomous drives. The mission queue lives on the robot: &quot;turn around and drive one meter forward&quot; works, it turns 180° within a degree. You click in the 3D scene and the robot drives there, and if the point is behind, it turns around back and forth in a few moves.</p>
 </div>
-            
+            <div class="post-media">
+        <a class="media-item" href="media/167-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/167-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        </a>
+    </div>
         </article>
     <div class="divider">...</div>
         <article class="post" id="166">
@@ -671,9 +510,13 @@
                 <a href="#166">#166</a>
                 <div class="post-meta">01-10-2026</div>
             </div>
-            <div class="post-body"><p>The funniest part: the ZED couldn&#39;t hold 30 fps because the CPU was sitting at 730 MHz out of 1728 and the GPU at 306 out of 1020. Nobody had run <code>jetson_clocks</code>. One command and frame capture went from 34 ms to 14 ms.</p>
+            <div class="post-body"><p>The UI is completely rewritten: now it&#39;s one 3D scene with the robot in Crysis style, telemetry panels, a third-person camera and an AI chat right in the interface. In the chat you can ask about the data and get a chart, or ask the robot to drive, but any motion needs an APPROVE click. The bunny model with ears was also drawn by the agent.</p>
 </div>
-            
+            <div class="post-media">
+        <a class="media-item" href="media/166-1.jpg" target="_blank" rel="noopener noreferrer">
+            <img src="media/thumbnails/166-1.webp" alt="Preview" loading="lazy" decoding="async" />
+        </a>
+    </div>
         </article>
     <div class="divider">...</div>
         <article class="post" id="165">
@@ -681,14 +524,7 @@
                 <a href="#165">#165</a>
                 <div class="post-meta">01-10-2026</div>
             </div>
-            <div class="post-body"><p>First we sorted out the telemetry. Before, roboclaw published speed 10 times a second and the current sensor once a second, which is useless because a battery sag on launch lasts a few hundred milliseconds. Now motors and power are 50 Hz, steering 20 Hz, IMU from the camera ~110 Hz (400 Hz inside, I average it), and every message has a timestamp in nanoseconds.</p>
-<p>Along the way we found a bunch of old bugs:</p>
-<ul>
-<li>RoboClaw <code>read_status</code> expected 1 byte but firmware 4.x returns 4 bytes + CRC, so the status always failed with CRC mismatch</li>
-<li><code>set_interval</code> in <code>init()</code> never returned</li>
-<li>a bare <code>except:</code> swallowed <code>CancelledError</code>, nodes couldn&#39;t shut down properly and the map was never saved on stop</li>
-<li>the camera wrote the current white balance into KV as the default and the picture stayed yellow forever</li>
-</ul>
+            <div class="post-body"><p>In parallel I started Forge. The idea is simple: write absolutely everything the robot publishes into ClickHouse on one clock and add an agent that answers questions about this data. For common questions there are pre-checked queries (I called them slabs), for everything else the agent writes SQL itself, but it goes through a static check and EXPLAIN before it runs. Plus anomaly detection with Chronos-2, a foundation model for time series: it predicts what a signal should look like and an anomaly is when the signal leaves the forecast band. The next day Forge moved right onto the Jetson, so recording no longer depends on whether my mac is on.</p>
 </div>
             
         </article>
@@ -698,7 +534,8 @@
                 <a href="#164">#164</a>
                 <div class="post-meta">01-10-2026</div>
             </div>
-            <div class="post-body"><p>I haven&#39;t written anything for over a year. The robot mostly just sat there: when I turned it on, docker said all the containers had exited 5 months ago. I decided to come back to it with a new approach: almost all the code is now written by Claude Code agents, and I set the tasks, watch what comes out, put the robot on the floor and carry it from place to place. Let&#39;s see how it goes.</p>
+            <div class="post-body"><p>I haven&#39;t written anything for over a year. The robot mostly just sat there: when I turned it on, docker said all the containers had exited 5 months ago. I decided to come back to it with a new approach: almost all the code is now written by Claude Code agents, and I set the tasks, watch what comes out, put the robot on the floor and carry it from place to place.</p>
+<p>The first finding was a funny one right away: the ZED couldn&#39;t hold 30 fps because the CPU was sitting at 730 MHz out of 1728 and the GPU at 306 out of 1020. Nobody had run <code>jetson_clocks</code>. One command and frame capture went from 34 ms to 14 ms.</p>
 </div>
             
         </article>
