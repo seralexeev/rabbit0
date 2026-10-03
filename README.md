@@ -2104,4 +2104,4 @@ After a few days with Claude trying to make navigation and positioning precise a
 -   there's a 30 cm blind zone in front and nothing at all behind. The robot pushed its rear into a wall for 70 seconds thinking it was driving. Now it's clear why the vacuum has a bumper it keeps kicking things with: it's the cheapest and most reliable sensor
 -   while exploring the flat the robot leaves a room without finishing the corners and then comes back. Exactly like the vacuum
 
-And that's one flat, good light and a robot that knows everything about itself: geometry, turning radius, where the camera is. A $200 vacuum has a lidar, a bumper and cliff sensors and it still gets stuck under the sofa. I respect it now.
+And that's one flat, good light and a robot that knows everything about itself: geometry, turning radius, where the camera is. A $2000 vacuum has a lidar, a bumper and cliff sensors and it still gets stuck under the sofa. I respect it now.
